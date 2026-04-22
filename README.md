@@ -22,7 +22,9 @@ If `BEARER_TOKEN` is missing, **`/data/*` returns 503** until you set the variab
 - **GET /data/all** — full dump
 - **GET /data/:index** — one record
 - **PUT /data/:index** — replace
-- **DELETE /data/:index** — delete
+- **DELETE /data/:index** — delete one
+- **DELETE /data** — remove **all** data and reset ids
+- **GET /data/latest** — `maxIndex`, `latestUpdatedIndex`, `count`, `nextIndex`
 
 ## Local setup
 

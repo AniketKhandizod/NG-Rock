@@ -117,11 +117,48 @@ function deleteRecord(req, res, next) {
     }
 }
 
+/**
+ * DELETE /data — remove every record and reset the auto-increment counter.
+ */
+function deleteAllData(req, res, next) {
+    try {
+        const before = dataService.size();
+        dataService.clearAll();
+        sendSuccess(res, req, 200, "All data deleted and sequence reset", {
+            deletedCount: before
+        });
+    } catch (e) {
+        next(e);
+    }
+}
+
+/**
+ * GET /data/latest — max index in store, last created/updated index, counts.
+ */
+function getLatestIndex(req, res, next) {
+    try {
+        const maxIndex = dataService.getMaxIndex();
+        const latestUpdatedIndex = dataService.getLatestUpdatedIndex();
+        const count = dataService.size();
+        const nextIndex = dataService.getNextIndex();
+        sendSuccess(res, req, 200, "OK", {
+            maxIndex,
+            latestUpdatedIndex,
+            count,
+            nextIndex
+        });
+    } catch (e) {
+        next(e);
+    }
+}
+
 module.exports = {
     createRecord,
     listIndexes,
     getAllRecords,
     getOne,
     updateRecord,
-    deleteRecord
+    deleteRecord,
+    deleteAllData,
+    getLatestIndex
 };

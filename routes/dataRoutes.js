@@ -7,8 +7,11 @@ const router = express.Router();
 router.use(bearerAuth);
 
 /**
- * Order matters: `/all` must be registered before `/:index` or "all" is parsed as a numeric id.
+ * Static paths before `/:index` (otherwise "all", "latest" match as ids).
+ * DELETE / is delete-all; GET / is list indexes; GET /all, GET /latest, etc.
  */
+router.get("/latest", dataController.getLatestIndex);
+router.delete("/", dataController.deleteAllData);
 router.get("/", dataController.listIndexes);
 router.get("/all", dataController.getAllRecords);
 

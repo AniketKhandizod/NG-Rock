@@ -37,10 +37,12 @@ router.get("/", (req, res) => {
         dataRoutes: {
             listIndexes: "GET /data",
             getAll: "GET /data/all",
+            getLatest: "GET /data/latest",
             getOne: "GET /data/:index",
             create: "POST /data",
             update: "PUT /data/:index",
-            remove: "DELETE /data/:index"
+            removeOne: "DELETE /data/:index",
+            removeAll: "DELETE /data (deletes all rows, resets id sequence)"
         }
     });
 });

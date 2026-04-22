@@ -4,6 +4,8 @@
  */
 const store = new Map();
 let nextIndex = 1;
+/** Last index that was created or updated (for “latest” metadata). */
+let lastTouchedIndex = null;
 
 function isPositiveIntegerId(n) {
     return Number.isInteger(n) && n > 0;
@@ -17,6 +19,7 @@ function create(value) {
     const id = nextIndex;
     nextIndex += 1;
     store.set(id, value);
+    lastTouchedIndex = id;
     return id;
 }
 
@@ -51,6 +54,7 @@ function getAllEntries() {
 function update(index, value) {
     if (!isPositiveIntegerId(index) || !store.has(index)) return false;
     store.set(index, value);
+    lastTouchedIndex = index;
     return true;
 }
 
@@ -60,7 +64,11 @@ function update(index, value) {
  */
 function remove(index) {
     if (!isPositiveIntegerId(index)) return false;
-    return store.delete(index);
+    const ok = store.delete(index);
+    if (ok && lastTouchedIndex === index) {
+        lastTouchedIndex = null;
+    }
+    return ok;
 }
 
 function size() {
@@ -78,6 +86,39 @@ function getAllAsObject() {
     return o;
 }
 
+/**
+ * Highest index among rows that still exist; 0 if the store is empty.
+ */
+function getMaxIndex() {
+    if (store.size === 0) return 0;
+    return Math.max(...store.keys());
+}
+
+/**
+ * Index most recently created or updated; null if none / was cleared.
+ */
+function getLatestUpdatedIndex() {
+    if (lastTouchedIndex == null) return null;
+    return store.has(lastTouchedIndex) ? lastTouchedIndex : null;
+}
+
+/**
+ * Next index that POST will assign.
+ */
+function getNextIndex() {
+    return nextIndex;
+}
+
+/**
+ * Remove every record and reset auto-increment.
+ */
+function clearAll() {
+    store.clear();
+    nextIndex = 1;
+    lastTouchedIndex = null;
+    return true;
+}
+
 module.exports = {
     create,
     getAllIndexIds,
@@ -86,5 +127,9 @@ module.exports = {
     getAllAsObject,
     update,
     remove,
-    size
+    size,
+    getMaxIndex,
+    getLatestUpdatedIndex,
+    getNextIndex,
+    clearAll
 };
