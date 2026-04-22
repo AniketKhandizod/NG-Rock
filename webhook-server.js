@@ -21,7 +21,7 @@ const MAX_DELAY_SECONDS = 50;
  * Artificial delay before each request is handled (seconds). Edit this value only — not from env.
  * Example: `1` → wait 1s before route handlers; `0` → no delay (good for ngrok / slow-client tests).
  */
-const REQUEST_DELAY_SECONDS = 10;
+const REQUEST_DELAY_SECONDS = 1;
 
 const effectiveRequestDelaySeconds = Math.min(
     MAX_DELAY_SECONDS,
