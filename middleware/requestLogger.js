@@ -1,6 +1,6 @@
 const { randomUUID } = require("crypto");
 const { formatIst24hTime } = require("../utils/time");
-const { getServerLocationLabel, formatRamCpu } = require("../utils/serverStats");
+const { getServerIPv4ForLogs } = require("../utils/serverStats");
 
 function getClientIp(req) {
     const forwarded = req.headers["x-forwarded-for"];
@@ -14,25 +14,24 @@ function getClientIp(req) {
 }
 
 /**
- * One readable line per completed request:
- * {{>>}} {HH:mm:ss IST} | {location} | {RAM% + CPU L1m} | {METHOD path} | {client IP} | {status} {ms}
+ * IST time | Server IP | Request IP | endpoint | seconds | status
  */
 function requestLogger(req, res, next) {
     req.id = randomUUID();
     res.setHeader("X-Request-Id", req.id);
+    const serverIp = getServerIPv4ForLogs();
     const start = process.hrtime.bigint();
     res.on("finish", () => {
         const end = process.hrtime.bigint();
         const ms = Number(end - start) / 1e6;
-        const time = `${formatIst24hTime()} IST`;
-        const location = getServerLocationLabel();
-        const resources = formatRamCpu();
+        const seconds = (ms / 1000).toFixed(4);
+        const istTime = `${formatIst24hTime()} IST`;
+        const requestIp = getClientIp(req);
         const endpoint = `${req.method} ${req.originalUrl || req.url}`;
-        const ip = getClientIp(req);
         const status = res.statusCode;
         // eslint-disable-next-line no-console
         console.log(
-            `{{>>}} ${time} | ${location} | ${resources} | ${endpoint} | ${ip} | ${status} ${ms.toFixed(0)}ms`
+            `${istTime} | ${serverIp} | ${requestIp} | ${endpoint} | ${seconds}s | ${status}`
         );
     });
     next();

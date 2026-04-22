@@ -30,4 +30,30 @@ function formatRamCpu() {
     return `${ramPart} ${loadPart}`;
 }
 
-module.exports = { getServerLocationLabel, formatRamCpu };
+/**
+ * First non-internal IPv4 on this host (for log “server IP”). Falls back to loopback.
+ */
+function isIPv4Family(net) {
+    return net.family === "IPv4" || net.family === 4;
+}
+
+function getServerIPv4ForLogs() {
+    const nets = os.networkInterfaces();
+    for (const name of Object.keys(nets)) {
+        for (const net of nets[name] || []) {
+            if (isIPv4Family(net) && !net.internal) {
+                return net.address;
+            }
+        }
+    }
+    for (const name of Object.keys(nets)) {
+        for (const net of nets[name] || []) {
+            if (isIPv4Family(net)) {
+                return net.address;
+            }
+        }
+    }
+    return "0.0.0.0";
+}
+
+module.exports = { getServerLocationLabel, formatRamCpu, getServerIPv4ForLogs };
