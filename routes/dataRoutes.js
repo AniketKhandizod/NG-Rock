@@ -1,10 +1,10 @@
 const express = require("express");
 const dataController = require("../controllers/dataController");
-const apiKeyAuth = require("../middleware/apiKeyAuth");
+const bearerAuth = require("../middleware/bearerAuth");
 
 const router = express.Router();
 
-router.use(apiKeyAuth);
+router.use(bearerAuth);
 
 /**
  * Order matters: `/all` must be registered before `/:index` or "all" is parsed as a numeric id.

@@ -11,7 +11,7 @@ const server = app.listen(config.port, host, () => {
     console.log(`[server] listening on http://${host}:${config.port} (${config.nodeEnv})`);
     if (config.isRailway) {
         // eslint-disable-next-line no-console
-        console.log("[server] Railway: set variable API_KEY; logs use India Standard Time (IST).");
+        console.log("[server] Railway deploy: auth is Bearer token (see config/auth.js). Logs use IST.");
     }
 });
 

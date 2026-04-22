@@ -19,7 +19,7 @@ router.get("/health", (req, res) => {
             uptimeSeconds: process.uptime(),
             environment: config.nodeEnv,
             time: formatIstIso(),
-            dataApiReady: config.isAuthReady
+            dataApiReady: true
         },
         error: null,
         requestId: req.id,
@@ -31,7 +31,7 @@ router.get("/health", (req, res) => {
  * API discovery (public).
  */
 router.get("/", (req, res) => {
-    sendSuccess(res, req, 200, "Data API — all write/read routes are under /data and require x-api-key", {
+    sendSuccess(res, req, 200, "Data API — /data routes require Authorization: Bearer <token> (token is set in server code)", {
         version: "1.0.0",
         dataRoutes: {
             listIndexes: "GET /data",
