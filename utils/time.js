@@ -8,6 +8,25 @@ function nowIst() {
 }
 
 /**
+ * Time only, 24h, Asia/Kolkata — e.g. `16:32:10`
+ */
+function formatIst24hTime(date = new Date()) {
+    try {
+        return new Intl.DateTimeFormat("en-GB", {
+            timeZone: TIMEZONE,
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+            hour12: false,
+            hourCycle: "h23"
+        }).format(date);
+    } catch {
+        const d = new Date(date);
+        return `${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}:${String(d.getUTCSeconds()).padStart(2, "0")}`;
+    }
+}
+
+/**
  * One-line log timestamp, e.g. "22-04-2026, 4:32:10 pm" with IST.
  */
 function formatIstLogLine(date = new Date()) {
@@ -41,4 +60,4 @@ function formatIstIso(date = new Date()) {
     }
 }
 
-module.exports = { formatIstLogLine, formatIstIso, nowIst, TIMEZONE };
+module.exports = { formatIstLogLine, formatIstIso, formatIst24hTime, nowIst, TIMEZONE };

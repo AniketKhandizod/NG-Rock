@@ -1,9 +1,21 @@
 const { randomUUID } = require("crypto");
-const { formatIstLogLine } = require("../utils/time");
+const { formatIst24hTime } = require("../utils/time");
+const { getServerLocationLabel, formatRamCpu } = require("../utils/serverStats");
+
+function getClientIp(req) {
+    const forwarded = req.headers["x-forwarded-for"];
+    if (typeof forwarded === "string" && forwarded.trim()) {
+        return forwarded.split(",")[0].trim();
+    }
+    if (Array.isArray(forwarded) && forwarded[0]) {
+        return String(forwarded[0]).trim();
+    }
+    return req.socket?.remoteAddress || req.ip || "unknown";
+}
 
 /**
- * Assigns a request id (also returned as X-Request-Id) and logs one line per request:
- * IST time, method, path, status, response time in ms.
+ * One readable line per completed request:
+ * {{>>}} {HH:mm:ss IST} | {location} | {RAM% + CPU L1m} | {METHOD path} | {client IP} | {status} {ms}
  */
 function requestLogger(req, res, next) {
     req.id = randomUUID();
@@ -12,12 +24,15 @@ function requestLogger(req, res, next) {
     res.on("finish", () => {
         const end = process.hrtime.bigint();
         const ms = Number(end - start) / 1e6;
-        const method = req.method;
-        const url = req.originalUrl || req.url;
+        const time = `${formatIst24hTime()} IST`;
+        const location = getServerLocationLabel();
+        const resources = formatRamCpu();
+        const endpoint = `${req.method} ${req.originalUrl || req.url}`;
+        const ip = getClientIp(req);
         const status = res.statusCode;
         // eslint-disable-next-line no-console
         console.log(
-            `[${formatIstLogLine()}] ${method} ${url} ${status} ${ms.toFixed(1)}ms id=${req.id}`
+            `{{>>}} ${time} | ${location} | ${resources} | ${endpoint} | ${ip} | ${status} ${ms.toFixed(0)}ms`
         );
     });
     next();
