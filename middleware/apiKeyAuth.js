@@ -3,7 +3,25 @@ const { error: errBody } = require("../utils/response");
 const { formatIstIso } = require("../utils/time");
 
 /**
- * Requires `x-api-key` header to match configured API_KEY.
+ * Resolve client key from common header names (Postman often uses `API_KEY` by mistake).
+ */
+function getClientApiKey(req) {
+    const h = req.headers;
+    const candidates = [
+        h["x-api-key"],
+        h["x-apikey"],
+        h["api-key"],
+        h["api_key"],
+        h["apikey"]
+    ];
+    for (const c of candidates) {
+        if (typeof c === "string" && c.trim()) return c.trim();
+    }
+    return null;
+}
+
+/**
+ * Requires an API key header to match configured API_KEY / APT_KEY.
  */
 function apiKeyAuth(req, res, next) {
     const meta = { requestId: req.id, timestamp: formatIstIso() };
@@ -12,18 +30,18 @@ function apiKeyAuth(req, res, next) {
             ...errBody("Data API is not configured yet: missing API_KEY", {
                 code: "SERVICE_NOT_CONFIGURED",
                 details:
-                    "In Railway: open the NG-Rock service → Variables → add API_KEY (any long random string) → " +
-                    "Redeploy. Public / and /health work without a key; /data requires x-api-key after that."
+                    "Railway → NG-Rock → Variables: set API_KEY (or APT_KEY) to your secret, then Deploy. " +
+                    "Request header: x-api-key (or API_KEY) must match that value."
             }),
             ...meta
         });
     }
-    const key = req.headers["x-api-key"];
-    if (typeof key !== "string" || !key.trim()) {
+    const key = getClientApiKey(req);
+    if (!key) {
         return res.status(401).json({
             ...errBody("Authentication required", {
                 code: "UNAUTHORIZED",
-                details: "Provide a valid x-api-key header"
+                details: "Send header x-api-key (or API_KEY) with the same value as Railway API_KEY / APT_KEY"
             }),
             ...meta
         });
