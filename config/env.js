@@ -15,18 +15,34 @@ if (!Number.isInteger(port) || port < 1) {
 }
 
 const rawApiKey = process.env.API_KEY;
-if (isProduction && (!rawApiKey || !String(rawApiKey).trim())) {
+const trimmed = rawApiKey && String(rawApiKey).trim();
+const keyPresent = Boolean(trimmed);
+
+/**
+ * In production, if API_KEY is missing the process no longer exits (so Railway health checks
+ * can pass). If `API_KEY` is unset in production, `/data` routes return 503 until you add it.
+ * Non-production falls back to a dev default for local work.
+ */
+let apiKey;
+if (keyPresent) {
+    apiKey = trimmed;
+} else if (!isProduction) {
+    apiKey = "dev-insecure-key-change-via-api-key-env";
+} else {
+    apiKey = null;
     // eslint-disable-next-line no-console
-    console.error("FATAL: API_KEY is required in production (Railway Variables).");
-    process.exit(1);
+    console.warn(
+        "[config] API_KEY is not set. Add it in Railway → Variables, then redeploy. " +
+            "GET / will stay up; /data/* returns 503 until API_KEY is configured."
+    );
 }
 
 module.exports = {
     port,
-    /**
-     * Default for local dev only. Production must set API_KEY in Railway.
-     */
-    apiKey: (rawApiKey && String(rawApiKey).trim()) || "dev-insecure-key-change-via-api-key-env",
+    /** Secret used for `x-api-key` (null in production if unset). */
+    apiKey,
+    /** If false, production has no API_KEY: `/data` returns 503 until Variables are set. */
+    isAuthReady: keyPresent || !isProduction,
     nodeEnv,
     isProduction,
     isRailway: Boolean(process.env.RAILWAY_ENVIRONMENT)

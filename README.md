@@ -68,16 +68,13 @@ Production-oriented REST API for storing arbitrary JSON in memory, with API-key 
 
 1. Create a **New Project** → **Deploy from GitHub** (or empty repo) and connect this app root (where `package.json` and `server.js` live).
 2. Railway will run **`npm start`** and install dependencies via Nixpacks.
-3. In **Variables**, add at minimum:
-
-   | Variable   | Value                                      |
-   |------------|---------------------------------------------|
-   | `API_KEY`  | Long random string (e.g. `openssl rand -hex 32`) |
-   | `NODE_ENV` | `production` (recommended so the app enforces a real `API_KEY`) |
+3. In **Variables**, add **`API_KEY`** (long random string, e.g. `openssl rand -hex 32`).  
+   - If you deploy **without** `API_KEY` while `NODE_ENV=production`, the process **still starts** (no crash): `GET /` and `GET /health` work, but **`/data/*` returns HTTP 503** with a clear message until you add `API_KEY` and redeploy.
+   - `NODE_ENV=production` is optional; Railway often sets it automatically.
 
 4. `PORT` is set automatically; do not override unless you know what you are doing.
-5. After deploy, open the generated URL, e.g. `https://<name>.up.railway.app/health` — you should see `status: "success"`.
-6. All **`/data`** calls must include:
+5. After deploy, open `https://<name>.up.railway.app/health` — you should see `status: "success"`.
+6. All **`/data`** calls require a configured **`API_KEY`** and must include:
 
    ```http
    x-api-key: <your API_KEY from Railway>
