@@ -46,6 +46,9 @@ const AUTH = {
 // =====================================================
 const app = express();
 app.disable("x-powered-by");
+// Railway, Heroku, and other reverse proxies: correct req.ip / X-Forwarded-* usage
+app.set("trust proxy", 1);
+app.set("strict routing", false);
 app.use(helmet());
 app.use(express.json({ limit: "10mb" }));
 
@@ -336,8 +339,11 @@ function getWebhook(index) {
 // =====================================================
 function registerRoutes(base, auth = null) {
     const mid = auth ? [auth] : [];
+    const collectionPaths = [base, base.endsWith("/") ? base.slice(0, -1) : `${base}/`].filter(
+        (p, i, a) => a.indexOf(p) === i
+    );
 
-    app.post(base, ...mid, (req, res) => {
+    const postHandler = (req, res) => {
         try {
             if (!req.body || !Object.keys(req.body).length)
                 return res.status(400).json(ApiResponse.error("EMPTY", "Payload empty"));
@@ -349,8 +355,37 @@ function registerRoutes(base, auth = null) {
             console.error(`${getTimeStamp()} | STORE_FAIL`, e.message);
             return res.status(500).json(ApiResponse.error("STORE_FAIL", e.message));
         }
+    };
+
+    // POST: accept JSON body (industry default for webhooks)
+    app.post(collectionPaths, ...mid, postHandler);
+
+    // GET on collection: path exists, method wrong → 405 (not 404)
+    const notAllowed = (req, res) => {
+        res.set("Allow", "POST, OPTIONS, HEAD");
+        return res.status(405).json(
+            ApiResponse.error(
+                "METHOD_NOT_ALLOWED",
+                "This URL accepts POST only, with Content-Type: application/json and a JSON object body. GET is for fetching a stored item at /webhook/<index> (or the secured variants)."
+            )
+        );
+    };
+    app.get(collectionPaths, ...mid, notAllowed);
+
+    // HEAD/OPTIONS: safe for health checks and CORS preflight
+    const headHandler = (req, res) => {
+        res.set("Allow", "POST, GET, OPTIONS, HEAD");
+        res.set("Accept", "application/json, text/plain, */*");
+        return res.status(204).end();
+    };
+    app.head(collectionPaths, ...mid, headHandler);
+    app.options(collectionPaths, ...mid, (req, res) => {
+        res.set("Allow", "POST, GET, HEAD, OPTIONS");
+        res.set("Accept", "application/json");
+        return res.status(204).end();
     });
 
+    // GET single record by index
     app.get(`${base}/:index`, ...mid, (req, res) => {
         try {
             const index = validateIndex(req.params.index);
@@ -374,6 +409,22 @@ registerRoutes("/webhook/berartoken", bearerAuth);
 registerRoutes("/webhook/basicauthentication", basicAuth);
 
 // =====================================================
+// ROOT (Railway & manual checks without /health)
+// =====================================================
+app.get("/", (req, res) => {
+    res.json(
+        ApiResponse.success({
+            service: "webhook-server",
+            endpoints: {
+                postWebhook: "POST /webhook (JSON body)",
+                getByIndex: "GET /webhook/:index",
+                health: "GET /health"
+            }
+        }, "OK")
+    );
+});
+
+// =====================================================
 // HEALTH
 // =====================================================
 app.get("/health", (req, res) => {
@@ -384,7 +435,10 @@ app.get("/health", (req, res) => {
 // 404
 // =====================================================
 app.use((req, res) => {
-    res.status(404).json(ApiResponse.error("NOT_FOUND", "Route not found"));
+    res.status(404).json({
+        requestId: req.requestId,
+        ...ApiResponse.error("NOT_FOUND", "No matching route for this method and path")
+    });
 });
 
 // =====================================================
@@ -423,7 +477,7 @@ process.on("uncaughtException", (err) => {
 // =====================================================
 // START SERVER
 // =====================================================
-app.listen(PORT, () => {
+const server = app.listen(PORT, "0.0.0.0", () => {
     console.log("=================================");
     console.log("Webhook Server Started");
     console.log("Port:", PORT);
@@ -434,3 +488,19 @@ app.listen(PORT, () => {
     );
     console.log("=================================");
 });
+
+function shutdown(signal) {
+    return () => {
+        console.log(`[${getTimeStamp()}] ${signal} — closing server`);
+        server.close((err) => {
+            if (err) {
+                console.error("shutdown error", err);
+                process.exit(1);
+            }
+            process.exit(0);
+        });
+        setTimeout(() => process.exit(1), 15_000).unref();
+    };
+}
+process.on("SIGTERM", shutdown("SIGTERM"));
+process.on("SIGINT", shutdown("SIGINT"));
