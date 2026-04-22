@@ -1,0 +1,572 @@
+{
+  "info": {
+    "_postman_id": "4994b3c5-f2bc-4356-aeec-d9e33e844dc8",
+    "name": "Webhook (Railway / local)",
+    "description": "Set collection variable `NG_URL` to your public base, e.g. `https://your-app.up.railway.app` (no trailing slash). Server logs and JSON `timestamp` use Asia/Kolkata (IST).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "26666609"
+  },
+  "item": [
+    {
+      "name": "GET /health",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{NG_URL}}/health",
+          "host": [
+            "{{NG_URL}}"
+          ],
+          "path": [
+            "health"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "POST - No Authentication",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n    \"text\":\"PASS\"\r\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{NG_URL}}/webhook",
+          "host": [
+            "{{NG_URL}}"
+          ],
+          "path": [
+            "webhook"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "GET latest index  - No Authentication -1",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "const j = pm.response.json();\r",
+              "if (j && typeof j.Index === \"number\") {\r",
+              "  pm.collectionVariables.set(\"latest_index\", String(j.Index));\r",
+              "}\r",
+              ""
+            ],
+            "type": "text/javascript",
+            "packages": {},
+            "requests": {}
+          }
+        }
+      ],
+      "protocolProfileBehavior": {
+        "disableBodyPruning": true
+      },
+      "request": {
+        "method": "GET",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n    \"text\":\"PASS\"\r\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{NG_URL}}/webhook/latest-index",
+          "host": [
+            "{{NG_URL}}"
+          ],
+          "path": [
+            "webhook",
+            "latest-index"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "GET  - No Authentication",
+      "protocolProfileBehavior": {
+        "disableBodyPruning": true
+      },
+      "request": {
+        "method": "GET",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n    \"text\":\"PASS\"\r\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{NG_URL}}/webhook/{{latest_index}}",
+          "host": [
+            "{{NG_URL}}"
+          ],
+          "path": [
+            "webhook",
+            "{{latest_index}}"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "POST - API Key",
+      "request": {
+        "auth": {
+          "type": "apikey",
+          "apikey": [
+            {
+              "key": "value",
+              "value": "api_live_Uz7XkL9mQa3sVp5RjY2wTnHd8Ef4Bc6P",
+              "type": "string"
+            },
+            {
+              "key": "key",
+              "value": "x-api-key",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n    \"text\":\"PASS\"\r\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{NG_URL}}/webhook/api_key",
+          "host": [
+            "{{NG_URL}}"
+          ],
+          "path": [
+            "webhook",
+            "api_key"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "GET latest index  - No Authentication - 2",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "const j = pm.response.json();\r",
+              "if (j && typeof j.Index === \"number\") {\r",
+              "  pm.collectionVariables.set(\"latest_index\", String(j.Index));\r",
+              "}\r",
+              ""
+            ],
+            "type": "text/javascript",
+            "packages": {},
+            "requests": {}
+          }
+        }
+      ],
+      "protocolProfileBehavior": {
+        "disableBodyPruning": true
+      },
+      "request": {
+        "method": "GET",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n    \"text\":\"PASS\"\r\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{NG_URL}}/webhook/latest-index",
+          "host": [
+            "{{NG_URL}}"
+          ],
+          "path": [
+            "webhook",
+            "latest-index"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "GET  - API Key",
+      "protocolProfileBehavior": {
+        "disableBodyPruning": true
+      },
+      "request": {
+        "auth": {
+          "type": "apikey",
+          "apikey": [
+            {
+              "key": "value",
+              "value": "api_live_Uz7XkL9mQa3sVp5RjY2wTnHd8Ef4Bc6P",
+              "type": "string"
+            },
+            {
+              "key": "key",
+              "value": "x-api-key",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "GET",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n    \"text\":\"PASS\"\r\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{NG_URL}}/webhook/api_key/{{latest_index}}",
+          "host": [
+            "{{NG_URL}}"
+          ],
+          "path": [
+            "webhook",
+            "api_key",
+            "{{latest_index}}"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "POST - Bearer Token",
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "bear_live_JwT9XkLmPqRsTnUvWxYz123456789",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n    \"text\":\"PASS\"\r\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{NG_URL}}/webhook/berartoken",
+          "host": [
+            "{{NG_URL}}"
+          ],
+          "path": [
+            "webhook",
+            "berartoken"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "GET latest index  - No Authentication - 3",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "const j = pm.response.json();\r",
+              "if (j && typeof j.Index === \"number\") {\r",
+              "  pm.collectionVariables.set(\"latest_index\", String(j.Index));\r",
+              "}\r",
+              ""
+            ],
+            "type": "text/javascript",
+            "packages": {},
+            "requests": {}
+          }
+        }
+      ],
+      "protocolProfileBehavior": {
+        "disableBodyPruning": true
+      },
+      "request": {
+        "method": "GET",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n    \"text\":\"PASS\"\r\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{NG_URL}}/webhook/latest-index",
+          "host": [
+            "{{NG_URL}}"
+          ],
+          "path": [
+            "webhook",
+            "latest-index"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "GET  - Bearer Token",
+      "protocolProfileBehavior": {
+        "disableBodyPruning": true
+      },
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "bear_live_JwT9XkLmPqRsTnUvWxYz123456789",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "GET",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n    \"text\":\"PASS\"\r\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{NG_URL}}/webhook/berartoken/{{latest_index}}",
+          "host": [
+            "{{NG_URL}}"
+          ],
+          "path": [
+            "webhook",
+            "berartoken",
+            "{{latest_index}}"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "POST - Basic Authentication",
+      "request": {
+        "auth": {
+          "type": "basic",
+          "basic": [
+            {
+              "key": "password",
+              "value": "A9#kLm2!Pq7@Zx4$Rt8!Nv3#Bd",
+              "type": "string"
+            },
+            {
+              "key": "username",
+              "value": "system.integration@sell.do",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n    \"text\":\"PASS\"\r\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{NG_URL}}/webhook/basicauthentication",
+          "host": [
+            "{{NG_URL}}"
+          ],
+          "path": [
+            "webhook",
+            "basicauthentication"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "GET latest index  - No Authentication - 4",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "const j = pm.response.json();\r",
+              "if (j && typeof j.Index === \"number\") {\r",
+              "  pm.collectionVariables.set(\"latest_index\", String(j.Index));\r",
+              "}\r",
+              ""
+            ],
+            "type": "text/javascript",
+            "packages": {},
+            "requests": {}
+          }
+        }
+      ],
+      "protocolProfileBehavior": {
+        "disableBodyPruning": true
+      },
+      "request": {
+        "method": "GET",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n    \"text\":\"PASS\"\r\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{NG_URL}}/webhook/latest-index",
+          "host": [
+            "{{NG_URL}}"
+          ],
+          "path": [
+            "webhook",
+            "latest-index"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "GET  - Basic Authentication",
+      "protocolProfileBehavior": {
+        "disableBodyPruning": true
+      },
+      "request": {
+        "auth": {
+          "type": "basic",
+          "basic": [
+            {
+              "key": "username",
+              "value": "system.integration@sell.do",
+              "type": "string"
+            },
+            {
+              "key": "password",
+              "value": "A9#kLm2!Pq7@Zx4$Rt8!Nv3#Bd",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "GET",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\r\n    \"text\":\"PASS\"\r\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{NG_URL}}/webhook/basicauthentication/{{latest_index}}",
+          "host": [
+            "{{NG_URL}}"
+          ],
+          "path": [
+            "webhook",
+            "basicauthentication",
+            "{{latest_index}}"
+          ]
+        }
+      },
+      "response": []
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "packages": {},
+        "requests": {},
+        "exec": [
+          ""
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "packages": {},
+        "requests": {},
+        "exec": [
+          ""
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "NG_URL",
+      "value": "https://YOUR_APP.up.railway.app"
+    },
+    {
+      "key": "latest_index",
+      "value": ""
+    },
+    {
+      "key": "temp",
+      "value": ""
+    }
+  ]
+}

@@ -13,33 +13,80 @@ const { v4: uuidv4 } = require("uuid");
 // =====================================================
 const PORT = Number(process.env.PORT) || 3000;
 const DATA_FILE = path.join(__dirname, "webhook-data.json");
+const IS_RAILWAY = Boolean(process.env.RAILWAY_ENVIRONMENT);
+const IS_PROD = process.env.NODE_ENV === "production" || IS_RAILWAY;
+
+/**
+ * Logs and API `timestamp` fields use Asia/Kolkata (IST) for local readability in India.
+ * Override the whole process timezone on Railway: TZ=Asia/Kolkata (optional; app still formats explicitly).
+ */
+const TZ_IST = "Asia/Kolkata";
 
 /** Upper bound for the delay below (avoids accidental huge waits). */
 const MAX_DELAY_SECONDS = 50;
 
 /**
- * Artificial delay before each request is handled (seconds). Edit this value only — not from env.
- * Example: `1` → wait 1s before route handlers; `0` → no delay (good for ngrok / slow-client tests).
+ * Per-request delay (ms) before business logic. Default 0 on Railway/production, else env or 0.
+ * Set e.g. WEBHOOK_REQUEST_DELAY_MS=1000 to simulate slow clients.
  */
-const REQUEST_DELAY_SECONDS = 1;
+const REQUEST_DELAY_MS = (() => {
+    const fromEnv = process.env.WEBHOOK_REQUEST_DELAY_MS;
+    if (fromEnv !== undefined && fromEnv !== "") {
+        const n = Math.min(MAX_DELAY_SECONDS * 1000, Math.max(0, Number(fromEnv) || 0));
+        return n;
+    }
+    if (IS_PROD) return 0;
+    return 0;
+})();
 
-const effectiveRequestDelaySeconds = Math.min(
-    MAX_DELAY_SECONDS,
-    Math.max(0, Math.floor(Number(REQUEST_DELAY_SECONDS)) || 0)
-);
-if (Number(REQUEST_DELAY_SECONDS) > MAX_DELAY_SECONDS) {
-    console.warn(
-        `[config] REQUEST_DELAY_SECONDS (${REQUEST_DELAY_SECONDS}) capped at ${MAX_DELAY_SECONDS}s`
-    );
+if (Number(process.env.WEBHOOK_REQUEST_DELAY_MS) > MAX_DELAY_SECONDS * 1000) {
+    console.warn(`[config] WEBHOOK_REQUEST_DELAY_MS capped at ${MAX_DELAY_SECONDS}s`);
 }
-const REQUEST_DELAY_MS = effectiveRequestDelaySeconds * 1000;
 
+/** Credentials: set on Railway (Variables); fallbacks for local/Postman. */
 const AUTH = {
-    API_KEY: "api_live_Uz7XkL9mQa3sVp5RjY2wTnHd8Ef4Bc6P",
-    BEARER: "bear_live_JwT9XkLmPqRsTnUvWxYz123456789",
-    BASIC_USER: "system.integration@sell.do",
-    BASIC_PASS: "A9#kLm2!Pq7@Zx4$Rt8!Nv3#Bd"
+    API_KEY: process.env.WEBHOOK_API_KEY || "api_live_Uz7XkL9mQa3sVp5RjY2wTnHd8Ef4Bc6P",
+    BEARER: process.env.WEBHOOK_BEARER || "bear_live_JwT9XkLmPqRsTnUvWxYz123456789",
+    BASIC_USER: process.env.WEBHOOK_BASIC_USER || "system.integration@sell.do",
+    BASIC_PASS: process.env.WEBHOOK_BASIC_PASS || "A9#kLm2!Pq7@Zx4$Rt8!Nv3#Bd"
 };
+
+/** For console lines (India Standard Time). */
+function formatIstForLogs(date = new Date()) {
+    try {
+        return (
+            new Intl.DateTimeFormat("en-IN", {
+                timeZone: TZ_IST,
+                year: "numeric",
+                month: "2-digit",
+                day: "2-digit",
+                hour: "2-digit",
+                minute: "2-digit",
+                second: "2-digit",
+                hour12: true
+            }).format(date) + " IST"
+        );
+    } catch {
+        return String(date);
+    }
+}
+
+/**
+ * API-facing ISO-like timestamp in IST (India has fixed UTC+05:30, no DST).
+ * Example: 2026-04-22T15:30:45+05:30
+ */
+function formatTimestampIstIso(date = new Date()) {
+    try {
+        const s = new Date(date).toLocaleString("sv-SE", { timeZone: TZ_IST });
+        const head = s.includes("T") ? s.split("T") : s.split(" ");
+        const d = (head[0] || "").replace(/\//g, "-");
+        const t = (s.includes("T") ? s.split("T")[1] : s.split(" ")[1] || "").split(".")[0] || "00:00:00";
+        if (!d) return new Date(date).toISOString();
+        return `${d}T${t}+05:30`;
+    } catch {
+        return new Date().toISOString();
+    }
+}
 
 // =====================================================
 // EXPRESS INIT
@@ -56,7 +103,9 @@ app.use(express.json({ limit: "10mb" }));
 // REQUEST ID + START TIME (for logging & duration)
 // =====================================================
 app.use((req, res, next) => {
-    req.requestId = uuidv4();
+    const incoming = req.headers["x-request-id"] || req.headers["x-correlation-id"];
+    req.requestId = (typeof incoming === "string" && incoming.trim() ? incoming.trim() : null) || uuidv4();
+    res.setHeader("X-Request-Id", req.requestId);
     req.startedAt = Date.now();
     next();
 });
@@ -88,14 +137,6 @@ app.use((req, res, next) => {
 });
 
 // =====================================================
-// TIME FORMAT → HH:MM:SS (local)
-// =====================================================
-function getTimeStamp() {
-    const d = new Date();
-    return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}:${String(d.getSeconds()).padStart(2, "0")}`;
-}
-
-// =====================================================
 // AUDIT / REQUEST LOG (single readable line per completed request)
 // =====================================================
 function extractCredential(req) {
@@ -117,12 +158,12 @@ function truncate(str, max = 80) {
 function logRequestComplete(req, res) {
     const totalMs = Date.now() - (req.startedAt || Date.now());
     const parts = [
-        `[${getTimeStamp()}]`,
+        `[${formatIstForLogs()}]`,
         `${res.statusCode}`,
         `${req.method}`,
         req.originalUrl || req.url,
         `total=${totalMs}ms`,
-        `delay=${effectiveRequestDelaySeconds}s`,
+        `preDelayMs=${REQUEST_DELAY_MS}`,
         `id=${req.requestId}`,
         `ip=${req.clientIp}`,
         `auth=${extractCredential(req)}`,
@@ -137,33 +178,29 @@ app.use((req, res, next) => {
 });
 
 // =====================================================
-// GET LATEST INDEX (NO AUTH REQUIRED)
+// GET LATEST INDEX (NO AUTH — Postman uses response.Index)
 // =====================================================
 app.get("/webhook/latest-index", (req, res) => {
     try {
         const data = safeReadFile();
 
         if (!Array.isArray(data) || data.length === 0) {
-            return res.status(200).json({ Index: 0 });
+            return res.status(200).json({ Index: 0, ...apiMeta(req) });
         }
 
         const last = data[data.length - 1];
 
         if (!last || typeof last.index !== "number") {
-            console.warn(`${getTimeStamp()} | DATA_WARNING | Invalid index structure`);
-            return res.status(200).json({ Index: 0 });
+            console.warn(`${formatIstForLogs()} | DATA_WARNING | Invalid index structure`);
+            return res.status(200).json({ Index: 0, ...apiMeta(req) });
         }
 
-        return res.status(200).json({
-            Index: last.index
-        });
+        return res.status(200).json({ Index: last.index, ...apiMeta(req) });
     } catch (error) {
-        console.error(`${getTimeStamp()} | ERROR | latest-index`, error);
-        return res.status(500).json({
-            success: false,
-            errorCode: "LATEST_INDEX_FETCH_FAILED",
-            message: "Failed to fetch latest index safely"
-        });
+        console.error(`${formatIstForLogs()} | ERROR | latest-index`, error);
+        return res.status(500).json(
+            jsonError(req, "LATEST_INDEX_FETCH_FAILED", "Failed to fetch latest index safely")
+        );
     }
 });
 
@@ -195,14 +232,13 @@ app.use((req, res, next) => {
 
     if (cpu > 85 || mem > 85 || lag > 250) {
         console.warn(
-            `${getTimeStamp()} | LOAD_PROTECT | CPU:${cpu.toFixed(1)}% MEM:${mem.toFixed(1)}% LAG:${lag}ms`
+            `${formatIstForLogs()} | LOAD_PROTECT | CPU:${cpu.toFixed(1)}% MEM:${mem.toFixed(1)}% LAG:${lag}ms`
         );
 
-        return res.status(429).json({
-            success: false,
-            errorCode: "SYSTEM_OVERLOAD",
-            message: "System busy, try later"
-        });
+        return res
+            .status(429)
+            .set("Retry-After", "10")
+            .json(jsonError(req, "SYSTEM_OVERLOAD", "Service temporarily unavailable; try again after a short wait"));
     }
 
     next();
@@ -217,7 +253,7 @@ function safeReadFile() {
         const raw = fs.readFileSync(DATA_FILE, "utf8");
         return JSON.parse(raw);
     } catch (err) {
-        console.error(`${getTimeStamp()} | FILE_READ_ERROR`, err.message);
+        console.error(`${formatIstForLogs()} | FILE_READ_ERROR`, err.message);
         return [];
     }
 }
@@ -226,52 +262,68 @@ function safeWriteFile(data) {
     try {
         fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
     } catch (err) {
-        console.error(`${getTimeStamp()} | FILE_WRITE_ERROR`, err.message);
+        console.error(`${formatIstForLogs()} | FILE_WRITE_ERROR`, err.message);
         throw err;
     }
 }
 
 // =====================================================
-// DAILY CLEANUP AT 1 AM
+// DAILY CLEANUP — 1:00 AM (Asia/Kolkata, IST)
 // =====================================================
-function scheduleCleanup() {
-    function delay() {
-        const now = new Date();
-        const next = new Date();
-        next.setHours(1, 0, 0, 0);
-        if (now > next) next.setDate(next.getDate() + 1);
-        return next - now;
-    }
-
-    function run() {
-        try {
-            safeWriteFile([]);
-            console.log(`${getTimeStamp()} | CLEANUP | webhook-data.json cleared`);
-        } catch (err) {
-            console.error(`${getTimeStamp()} | CLEANUP_FAILED`, err.message);
-        }
-        setTimeout(run, 86400000);
-    }
-
-    setTimeout(run, delay());
+function getIstParts(date = new Date()) {
+    const p = new Intl.DateTimeFormat("en-GB", {
+        timeZone: TZ_IST,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false
+    }).formatToParts(date);
+    const get = (t) => Number(p.find((x) => x.type === t)?.value || 0);
+    return { y: get("year"), m: get("month"), d: get("day"), h: get("hour"), min: get("minute") };
 }
-scheduleCleanup();
+
+let lastCleanupIstYmd = null;
+
+function scheduleCleanupIst1Am() {
+    const run = () => {
+        const now = new Date();
+        const { y, m, d, h, min } = getIstParts(now);
+        const ymd = `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+
+        if (h === 1 && min === 0 && ymd !== lastCleanupIstYmd) {
+            lastCleanupIstYmd = ymd;
+            try {
+                safeWriteFile([]);
+                console.log(`${formatIstForLogs()} | CLEANUP_IST_1AM | webhook-data.json cleared (Asia/Kolkata)`);
+            } catch (err) {
+                console.error(`${formatIstForLogs()} | CLEANUP_FAILED`, err.message);
+            }
+        }
+    };
+    setInterval(run, 30_000);
+    run();
+}
+scheduleCleanupIst1Am();
 
 // =====================================================
-// RESPONSE FORMAT
+// RESPONSE FORMAT (problem-style JSON: code, message, requestId, timestamp)
 // =====================================================
-const ApiResponse = {
-    success: (data = {}, message = "OK") => ({
-        success: true,
-        message,
-        data
-    }),
-    error: (code, message) => ({
-        success: false,
-        errorCode: code,
-        message
-    })
-};
+function apiMeta(req) {
+    return {
+        requestId: req.requestId,
+        timestamp: formatTimestampIstIso()
+    };
+}
+
+function jsonSuccess(req, data = {}, message = "OK") {
+    return { success: true, message, data, ...apiMeta(req) };
+}
+
+function jsonError(req, errorCode, message) {
+    return { success: false, errorCode, message, ...apiMeta(req) };
+}
 
 // =====================================================
 // VALIDATION
@@ -286,29 +338,44 @@ function validateIndex(i) {
 // AUTH MIDDLEWARES
 // =====================================================
 function apiKeyAuth(req, res, next) {
-    if (req.headers["x-api-key"] !== AUTH.API_KEY)
-        return res.status(401).json(ApiResponse.error("INVALID_API_KEY", "Invalid API Key"));
+    if (req.headers["x-api-key"] !== AUTH.API_KEY) {
+        return res
+            .status(401)
+            .json(jsonError(req, "INVALID_API_KEY", "The x-api-key header is missing or invalid"));
+    }
     next();
 }
 
 function bearerAuth(req, res, next) {
-    const token = (req.headers.authorization || "").replace("Bearer ", "");
-    if (token !== AUTH.BEARER)
-        return res.status(401).json(ApiResponse.error("INVALID_BEARER", "Invalid Bearer Token"));
+    const token = (req.headers.authorization || "").replace(/^Bearer\s+/i, "");
+    if (token !== AUTH.BEARER) {
+        return res
+            .status(401)
+            .set("WWW-Authenticate", 'Bearer realm="webhook", error="invalid_token"')
+            .json(jsonError(req, "INVALID_BEARER", "The Bearer access token is missing or invalid"));
+    }
     next();
 }
 
 function basicAuth(req, res, next) {
     const auth = req.headers.authorization || "";
-    if (!auth.startsWith("Basic "))
-        return res.status(401).json(ApiResponse.error("INVALID_BASIC", "Missing Basic Auth"));
+    if (!auth.startsWith("Basic ")) {
+        return res
+            .status(401)
+            .set("WWW-Authenticate", 'Basic realm="Webhook", charset="UTF-8"')
+            .json(jsonError(req, "INVALID_BASIC", "Basic authentication is required (Authorization: Basic ...)"));
+    }
 
-    const decoded = Buffer.from(auth.split(" ")[1], "base64").toString();
-    const [user, pass] = decoded.split(":");
+    const decoded = Buffer.from(auth.split(" ")[1] || "", "base64").toString("utf8");
+    const [user, ...rest] = decoded.split(":");
+    const pass = rest.join(":");
 
-    if (user !== AUTH.BASIC_USER || pass !== AUTH.BASIC_PASS)
-        return res.status(401).json(ApiResponse.error("INVALID_BASIC", "Invalid Credentials"));
-
+    if (user !== AUTH.BASIC_USER || pass !== AUTH.BASIC_PASS) {
+        return res
+            .status(401)
+            .set("WWW-Authenticate", 'Basic realm="Webhook", charset="UTF-8"')
+            .json(jsonError(req, "INVALID_BASIC", "Invalid basic authentication credentials"));
+    }
     next();
 }
 
@@ -318,9 +385,11 @@ function basicAuth(req, res, next) {
 function storeWebhook(payload) {
     const data = safeReadFile();
 
+    const now = new Date();
     const record = {
         index: data.length + 1,
-        receivedAt: new Date().toISOString(),
+        receivedAt: now.toISOString(),
+        receivedAtIst: formatTimestampIstIso(now),
         payload
     };
 
@@ -368,14 +437,16 @@ function registerRoutes(base, auth = null) {
     const postHandler = (req, res) => {
         try {
             if (!req.body || !Object.keys(req.body).length)
-                return res.status(400).json(ApiResponse.error("EMPTY", "Payload empty"));
+                return res.status(400).json(jsonError(req, "EMPTY", "Request body must be a non-empty JSON object"));
 
             const r = storeWebhook(req.body);
 
-            return res.json(ApiResponse.success({ index: r.index }));
+            return res.status(200).json(jsonSuccess(req, { index: r.index }, "OK"));
         } catch (e) {
-            console.error(`${getTimeStamp()} | STORE_FAIL`, e.message);
-            return res.status(500).json(ApiResponse.error("STORE_FAIL", e.message));
+            console.error(`${formatIstForLogs()} | STORE_FAIL`, e.message);
+            const out = jsonError(req, "STORE_FAIL", "Could not persist webhook");
+            if (!IS_PROD) out.detail = e.message;
+            return res.status(500).json(out);
         }
     };
 
@@ -388,7 +459,8 @@ function registerRoutes(base, auth = null) {
             const fromQuery = normalizeQueryPayload(req.query);
             if (!fromQuery || !Object.keys(fromQuery).length) {
                 return res.status(200).json(
-                    ApiResponse.success(
+                    jsonSuccess(
+                        req,
                         {
                             hint: "Add query parameters to store data (e.g. ?text=PASS) or use POST with a JSON body.",
                             fetchByIndex: `GET ${base}/<positive integer>`,
@@ -399,10 +471,12 @@ function registerRoutes(base, auth = null) {
                 );
             }
             const r = storeWebhook(fromQuery);
-            return res.json(ApiResponse.success({ index: r.index, via: "GET" }));
+            return res.status(200).json(jsonSuccess(req, { index: r.index, via: "GET" }, "OK"));
         } catch (e) {
-            console.error(`${getTimeStamp()} | STORE_FAIL`, e.message);
-            return res.status(500).json(ApiResponse.error("STORE_FAIL", e.message));
+            console.error(`${formatIstForLogs()} | STORE_FAIL`, e.message);
+            const out = jsonError(req, "STORE_FAIL", "Could not persist webhook");
+            if (!IS_PROD) out.detail = e.message;
+            return res.status(500).json(out);
         }
     };
     app.get(collectionPaths, ...mid, getIngestHandler);
@@ -426,11 +500,11 @@ function registerRoutes(base, auth = null) {
             const index = validateIndex(req.params.index);
             const rec = getWebhook(index);
 
-            if (!rec) return res.status(404).json(ApiResponse.error("NOT_FOUND", "Webhook not found"));
+            if (!rec) return res.status(404).json(jsonError(req, "NOT_FOUND", "No stored webhook for this index"));
 
-            return res.json(ApiResponse.success(rec));
+            return res.status(200).json(jsonSuccess(req, rec, "OK"));
         } catch (e) {
-            return res.status(400).json(ApiResponse.error("BAD_REQUEST", e.message));
+            return res.status(400).json(jsonError(req, "BAD_REQUEST", e.message || "Invalid index"));
         }
     });
 }
@@ -448,15 +522,22 @@ registerRoutes("/webhook/basicauthentication", basicAuth);
 // =====================================================
 app.get("/", (req, res) => {
     res.json(
-        ApiResponse.success({
-            service: "webhook-server",
-            endpoints: {
-                postWebhook: "POST /webhook (JSON body)",
-                getWebhook: "GET /webhook?key=value&… (query → stored as payload; prefer POST in production)",
-                getByIndex: "GET /webhook/:index",
-                health: "GET /health"
-            }
-        }, "OK")
+        jsonSuccess(
+            req,
+            {
+                service: "webhook-server",
+                environment: IS_RAILWAY ? "railway" : "local",
+                docs: "Postman: set NG_URL to https://<project>.up.railway.app (no trailing slash).",
+                endpoints: {
+                    postWebhook: "POST /webhook (JSON body)",
+                    getWebhook: "GET /webhook?key=value&… (optional; prefer POST for secrets)",
+                    getLatestIndex: "GET /webhook/latest-index  →  { Index }",
+                    getByIndex: "GET /webhook/:index",
+                    health: "GET /health"
+                }
+            },
+            "OK"
+        )
     );
 });
 
@@ -464,17 +545,25 @@ app.get("/", (req, res) => {
 // HEALTH
 // =====================================================
 app.get("/health", (req, res) => {
-    res.json(ApiResponse.success({ uptime: process.uptime() }));
+    res.set("Cache-Control", "no-store");
+    res.status(200).json(
+        jsonSuccess(
+            req,
+            {
+                status: "ok",
+                uptimeSeconds: process.uptime(),
+                ts: formatTimestampIstIso()
+            },
+            "OK"
+        )
+    );
 });
 
 // =====================================================
 // 404
 // =====================================================
 app.use((req, res) => {
-    res.status(404).json({
-        requestId: req.requestId,
-        ...ApiResponse.error("NOT_FOUND", "No matching route for this method and path")
-    });
+    res.status(404).json(jsonError(req, "NOT_FOUND", "No route matches this request method and path"));
 });
 
 // =====================================================
@@ -482,10 +571,14 @@ app.use((req, res) => {
 // =====================================================
 app.use((err, req, res, next) => {
     if (err instanceof SyntaxError && "body" in err) {
-        return res.status(400).json(ApiResponse.error("INVALID_JSON", "Request body must be valid JSON"));
+        return res
+            .status(400)
+            .json(jsonError(req, "INVALID_JSON", "The request body must be valid application/json"));
     }
-    if (err.type === "entity.too.large") {
-        return res.status(413).json(ApiResponse.error("PAYLOAD_TOO_LARGE", "Request body exceeds limit"));
+    if (err && err.type === "entity.too.large") {
+        return res
+            .status(413)
+            .json(jsonError(req, "PAYLOAD_TOO_LARGE", "Request body is larger than the allowed limit (10mb)"));
     }
     next(err);
 });
@@ -497,8 +590,10 @@ app.use((err, req, res, next) => {
     if (res.headersSent) {
         return next(err);
     }
-    console.error(`[${getTimeStamp()}] UNHANDLED`, req.requestId, err);
-    res.status(500).json(ApiResponse.error("UNHANDLED", "Internal server error"));
+    console.error(`[${formatIstForLogs()}] UNHANDLED`, req.requestId, err);
+    const out = jsonError(req, "INTERNAL_ERROR", "An unexpected error occurred on the server");
+    if (!IS_PROD) out.detail = err && err.message ? String(err.message) : String(err);
+    res.status(500).json(out);
 });
 
 process.on("unhandledRejection", (reason) => {
@@ -517,17 +612,15 @@ const server = app.listen(PORT, "0.0.0.0", () => {
     console.log("=================================");
     console.log("Webhook Server Started");
     console.log("Port:", PORT);
-    console.log(
-        "REQUEST_DELAY_SECONDS (variable):",
-        REQUEST_DELAY_SECONDS,
-        `→ effective ${effectiveRequestDelaySeconds}s (${REQUEST_DELAY_MS}ms before handling)`
-    );
+    console.log("Timestamps: Asia/Kolkata (IST) in logs and API `timestamp` fields");
+    if (IS_RAILWAY) console.log("Railway: set WEBHOOK_* env for credentials; public URL in NG_URL (Postman).");
+    console.log("WEBHOOK_REQUEST_DELAY_MS →", REQUEST_DELAY_MS, "ms (0 = none, recommended for Railway).");
     console.log("=================================");
 });
 
 function shutdown(signal) {
     return () => {
-        console.log(`[${getTimeStamp()}] ${signal} — closing server`);
+        console.log(`[${formatIstForLogs()}] ${signal} — closing server`);
         server.close((err) => {
             if (err) {
                 console.error("shutdown error", err);
