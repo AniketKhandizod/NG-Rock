@@ -100,6 +100,17 @@ Production-oriented REST API for storing arbitrary JSON in memory, with API-key 
 
 Keep `dataService`’s public methods as the single boundary; reimplement them with your ORM/DB, then the routes/controllers can stay the same.
 
+## Troubleshooting `SERVICE_NOT_CONFIGURED` (503 on `/data`)
+
+This means the **Railway service** has no `API_KEY` set (or it is empty).
+
+1. Railway → your project → **NG-Rock** (or your service) → **Variables**.
+2. **Add** (or fix) variable: **Name:** `API_KEY` — **Value:** a long random string (e.g. 32+ chars). Save.
+3. **Redeploy** the service (Deployments → Redeploy) so the new variable is loaded.
+4. In your **client** (curl, Postman, app), send the **same** value in the header: `x-api-key: <that value>`.
+
+Check **GET `/health`**: `data.dataApiReady` should be `true` after the server env is correct. The key in Variables and the `x-api-key` header must **match** (they are not two different things—one is server config, one is the client proving it knows the secret).
+
 ## License
 
 ISC

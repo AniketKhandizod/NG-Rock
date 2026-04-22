@@ -18,7 +18,8 @@ router.get("/health", (req, res) => {
             service: "data-api",
             uptimeSeconds: process.uptime(),
             environment: config.nodeEnv,
-            time: formatIstIso()
+            time: formatIstIso(),
+            dataApiReady: config.isAuthReady
         },
         error: null,
         requestId: req.id,
