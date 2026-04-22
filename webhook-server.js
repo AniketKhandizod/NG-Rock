@@ -45,10 +45,10 @@ if (Number(process.env.WEBHOOK_REQUEST_DELAY_MS) > MAX_DELAY_SECONDS * 1000) {
 
 /** Credentials: set on Railway (Variables); fallbacks for local/Postman. */
 const AUTH = {
-    API_KEY: process.env.WEBHOOK_API_KEY || "api_live_Uz7XkL9mQa3sVp5RjY2wTnHd8Ef4Bc6P",
-    BEARER: process.env.WEBHOOK_BEARER || "bear_live_JwT9XkLmPqRsTnUvWxYz123456789",
-    BASIC_USER: process.env.WEBHOOK_BASIC_USER || "system.integration@sell.do",
-    BASIC_PASS: process.env.WEBHOOK_BASIC_PASS || "A9#kLm2!Pq7@Zx4$Rt8!Nv3#Bd"
+    API_KEY:  "api_live_Uz7XkL9mQa3sVp5RjY2wTnHd8Ef4Bc6P",
+    BEARER:  "bear_live_JwT9XkLmPqRsTnUvWxYz123456789",
+    BASIC_USER: "system.integration@sell.do",
+    BASIC_PASS:  "A9#kLm2!Pq7@Zx4$Rt8!Nv3#Bd"
 };
 
 /** For console lines (India Standard Time). */
