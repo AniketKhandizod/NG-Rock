@@ -102,10 +102,11 @@ Keep `dataService`’s public methods as the single boundary; reimplement them w
 
 ## Troubleshooting `SERVICE_NOT_CONFIGURED` (503 on `/data`)
 
-This means the **Railway service** has no `API_KEY` set (or it is empty).
+This means the **Railway service** has no usable API key in the environment (or it is empty).
 
 1. Railway → your project → **NG-Rock** (or your service) → **Variables**.
-2. **Add** (or fix) variable: **Name:** `API_KEY` — **Value:** a long random string (e.g. 32+ chars). Save.
+2. **Add** a variable: **Name:** `API_KEY` — **Value:** a long random string (e.g. 32+ chars). Save.  
+   If you previously used the typo **`APT_KEY`**, the app now accepts that name as a fallback; renaming to **`API_KEY`** is still recommended.
 3. **Redeploy** the service (Deployments → Redeploy) so the new variable is loaded.
 4. In your **client** (curl, Postman, app), send the **same** value in the header: `x-api-key: <that value>`.
 

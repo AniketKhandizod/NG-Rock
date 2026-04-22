@@ -14,9 +14,19 @@ if (!Number.isInteger(port) || port < 1) {
     throw new Error("Invalid PORT");
 }
 
-const rawApiKey = process.env.API_KEY;
-const trimmed = rawApiKey && String(rawApiKey).trim();
+/**
+ * `API_KEY` is canonical. `APT_KEY` is also read if `API_KEY` is unset (common typo in Railway).
+ */
+const tPrimary = (process.env.API_KEY && String(process.env.API_KEY).trim()) || "";
+const tTypo = (process.env.APT_KEY && String(process.env.APT_KEY).trim()) || "";
+const trimmed = tPrimary || tTypo;
 const keyPresent = Boolean(trimmed);
+if (keyPresent && !tPrimary && tTypo) {
+    // eslint-disable-next-line no-console
+    console.warn(
+        "[config] Using APT_KEY — rename the variable to API_KEY in Railway when convenient."
+    );
+}
 
 /**
  * In production, if API_KEY is missing the process no longer exits (so Railway health checks
@@ -25,7 +35,7 @@ const keyPresent = Boolean(trimmed);
  */
 let apiKey;
 if (keyPresent) {
-    apiKey = trimmed;
+    apiKey = trimmed; // value from API_KEY or APT_KEY
 } else if (!isProduction) {
     apiKey = "dev-insecure-key-change-via-api-key-env";
 } else {
