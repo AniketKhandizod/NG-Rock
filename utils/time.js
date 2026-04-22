@@ -27,6 +27,24 @@ function formatIst24hTime(date = new Date()) {
 }
 
 /**
+ * 12-hour clock, Asia/Kolkata — e.g. `10:19:56 PM` (for console logs).
+ */
+function formatIst12hTimeForLogs(date = new Date()) {
+    try {
+        let s = new Intl.DateTimeFormat("en-US", {
+            timeZone: TIMEZONE,
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+            hour12: true
+        }).format(date);
+        return s.replace(/\s+(am|pm)$/i, (_, x) => ` ${x.toUpperCase()}`);
+    } catch {
+        return formatIst24hTime(date);
+    }
+}
+
+/**
  * One-line log timestamp, e.g. "22-04-2026, 4:32:10 pm" with IST.
  */
 function formatIstLogLine(date = new Date()) {
@@ -60,4 +78,11 @@ function formatIstIso(date = new Date()) {
     }
 }
 
-module.exports = { formatIstLogLine, formatIstIso, formatIst24hTime, nowIst, TIMEZONE };
+module.exports = {
+    formatIstLogLine,
+    formatIstIso,
+    formatIst24hTime,
+    formatIst12hTimeForLogs,
+    nowIst,
+    TIMEZONE
+};

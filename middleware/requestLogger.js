@@ -1,5 +1,5 @@
 const { randomUUID } = require("crypto");
-const { formatIst24hTime } = require("../utils/time");
+const { formatIst12hTimeForLogs } = require("../utils/time");
 const { getServerIPv4ForLogs } = require("../utils/serverStats");
 
 function getClientIp(req) {
@@ -14,7 +14,7 @@ function getClientIp(req) {
 }
 
 /**
- * IST time | Server IP | Request IP | endpoint | seconds | status
+ * 10:19:56 PM | Server - ip | Requester - ip | METHOD path | Ns | status
  */
 function requestLogger(req, res, next) {
     req.id = randomUUID();
@@ -25,13 +25,13 @@ function requestLogger(req, res, next) {
         const end = process.hrtime.bigint();
         const ms = Number(end - start) / 1e6;
         const seconds = (ms / 1000).toFixed(4);
-        const istTime = `${formatIst24hTime()} IST`;
+        const clock = formatIst12hTimeForLogs();
         const requestIp = getClientIp(req);
         const endpoint = `${req.method} ${req.originalUrl || req.url}`;
         const status = res.statusCode;
         // eslint-disable-next-line no-console
         console.log(
-            `${istTime} | ${serverIp} | ${requestIp} | ${endpoint} | ${seconds}s | ${status}`
+            `${clock} | Server - ${serverIp} | Requester - ${requestIp} | ${endpoint} | ${seconds}s | ${status}`
         );
     });
     next();
