@@ -1,19 +1,23 @@
 {
   "name": "n",
   "version": "1.0.0",
-  "description": "",
-  "main": "webhook-server.js",
+  "description": "In-memory JSON data API (Express) — production-ready, Railway deployable",
+  "main": "server.js",
   "scripts": {
-    "start": "node webhook-server.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node server.js",
+    "dev": "node server.js",
+    "test": "echo \"No unit tests in repo yet\" && exit 0"
   },
-  "keywords": [],
+  "keywords": ["express", "railway", "api", "in-memory"],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "dependencies": {
+    "dotenv": "^16.4.5",
     "express": "^5.2.1",
-    "helmet": "^8.1.0",
-    "uuid": "^13.0.0"
+    "helmet": "^8.1.0"
   }
 }
