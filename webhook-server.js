@@ -334,6 +334,28 @@ function getWebhook(index) {
     return safeReadFile().find((x) => x.index === index);
 }
 
+function normalizeQueryPayload(query) {
+    if (!query || typeof query !== "object") return {};
+    const out = {};
+    for (const [k, v] of Object.entries(query)) {
+        if (k === "json" || k === "payload" || k === "data") {
+            if (typeof v === "string" && v.trim() !== "") {
+                try {
+                    const parsed = JSON.parse(v);
+                    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+                        Object.assign(out, parsed);
+                    }
+                } catch {
+                    out[k] = v;
+                }
+            }
+        } else if (v !== undefined) {
+            out[k] = v;
+        }
+    }
+    return out;
+}
+
 // =====================================================
 // ROUTE FACTORY
 // =====================================================
@@ -360,17 +382,30 @@ function registerRoutes(base, auth = null) {
     // POST: accept JSON body (industry default for webhooks)
     app.post(collectionPaths, ...mid, postHandler);
 
-    // GET on collection: path exists, method wrong → 405 (not 404)
-    const notAllowed = (req, res) => {
-        res.set("Allow", "POST, OPTIONS, HEAD");
-        return res.status(405).json(
-            ApiResponse.error(
-                "METHOD_NOT_ALLOWED",
-                "This URL accepts POST only, with Content-Type: application/json and a JSON object body. GET is for fetching a stored item at /webhook/<index> (or the secured variants)."
-            )
-        );
+    // GET: same store as POST, from query (browsers, simple integrations, or ?text=PASS)
+    const getIngestHandler = (req, res) => {
+        try {
+            const fromQuery = normalizeQueryPayload(req.query);
+            if (!fromQuery || !Object.keys(fromQuery).length) {
+                return res.status(200).json(
+                    ApiResponse.success(
+                        {
+                            hint: "Add query parameters to store data (e.g. ?text=PASS) or use POST with a JSON body.",
+                            fetchByIndex: `GET ${base}/<positive integer>`,
+                            viaPost: `POST ${base} with Content-Type: application/json`
+                        },
+                        "No query parameters to store"
+                    )
+                );
+            }
+            const r = storeWebhook(fromQuery);
+            return res.json(ApiResponse.success({ index: r.index, via: "GET" }));
+        } catch (e) {
+            console.error(`${getTimeStamp()} | STORE_FAIL`, e.message);
+            return res.status(500).json(ApiResponse.error("STORE_FAIL", e.message));
+        }
     };
-    app.get(collectionPaths, ...mid, notAllowed);
+    app.get(collectionPaths, ...mid, getIngestHandler);
 
     // HEAD/OPTIONS: safe for health checks and CORS preflight
     const headHandler = (req, res) => {
@@ -417,6 +452,7 @@ app.get("/", (req, res) => {
             service: "webhook-server",
             endpoints: {
                 postWebhook: "POST /webhook (JSON body)",
+                getWebhook: "GET /webhook?key=value&… (query → stored as payload; prefer POST in production)",
                 getByIndex: "GET /webhook/:index",
                 health: "GET /health"
             }
