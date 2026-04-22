@@ -1,7 +1,15 @@
 /**
- * Bearer token for protected `/data/*` routes (fixed in code — not read from Railway/env).
- * Change this value here if you need to rotate credentials, then redeploy.
+ * Load after `env` so `.env` is applied for local dev.
+ * Railway: set **BEARER_TOKEN** in the service Variables (same value you send as `Authorization: Bearer …`).
+ * Do not commit real secrets; only placeholder in `.env.example`.
  */
+require("./env");
+
+const trimmed = (process.env.BEARER_TOKEN && String(process.env.BEARER_TOKEN).trim()) || "";
+const isBearerReady = Boolean(trimmed);
+
 module.exports = {
-    BEARER_TOKEN: "amura@123#"
+    /** Resolved secret, or `""` if unset. */
+    BEARER_TOKEN: trimmed,
+    isBearerReady
 };

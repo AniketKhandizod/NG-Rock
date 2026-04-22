@@ -2,6 +2,7 @@ const express = require("express");
 const { sendSuccess } = require("../utils/apiSend");
 const { formatIstIso } = require("../utils/time");
 const config = require("../config/env");
+const { isBearerReady } = require("../config/auth");
 const dataRoutes = require("./dataRoutes");
 
 const router = express.Router();
@@ -19,7 +20,7 @@ router.get("/health", (req, res) => {
             uptimeSeconds: process.uptime(),
             environment: config.nodeEnv,
             time: formatIstIso(),
-            dataApiReady: true
+            dataApiReady: isBearerReady
         },
         error: null,
         requestId: req.id,
@@ -31,7 +32,7 @@ router.get("/health", (req, res) => {
  * API discovery (public).
  */
 router.get("/", (req, res) => {
-    sendSuccess(res, req, 200, "Data API — /data routes require Authorization: Bearer <token> (token is set in server code)", {
+    sendSuccess(res, req, 200, "Data API — /data routes require Authorization: Bearer <token> (set BEARER_TOKEN in environment / Railway)", {
         version: "1.0.0",
         dataRoutes: {
             listIndexes: "GET /data",

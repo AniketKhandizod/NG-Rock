@@ -1,4 +1,4 @@
-const { BEARER_TOKEN } = require("../config/auth");
+const { BEARER_TOKEN, isBearerReady } = require("../config/auth");
 const { error: errBody } = require("../utils/response");
 const { formatIstIso } = require("../utils/time");
 
@@ -14,6 +14,17 @@ function getBearerToken(req) {
 
 function bearerAuth(req, res, next) {
     const meta = { requestId: req.id, timestamp: formatIstIso() };
+    if (!isBearerReady) {
+        return res.status(503).json({
+            ...errBody("Bearer auth is not configured: missing BEARER_TOKEN", {
+                code: "SERVICE_NOT_CONFIGURED",
+                details:
+                    "Railway → your service → Variables → add BEARER_TOKEN (any strong secret) → redeploy. " +
+                    "Local: set BEARER_TOKEN in a .env file next to package.json."
+            }),
+            ...meta
+        });
+    }
     const token = getBearerToken(req);
     if (!token) {
         return res

@@ -2,8 +2,8 @@
  * Entry point for local runs and Railway deploys.
  * Railway injects process.env.PORT; do not hardcode a port in production.
  */
-const app = require("./app");
 const config = require("./config/env");
+const app = require("./app");
 
 const host = "0.0.0.0";
 const server = app.listen(config.port, host, () => {
@@ -11,7 +11,7 @@ const server = app.listen(config.port, host, () => {
     console.log(`[server] listening on http://${host}:${config.port} (${config.nodeEnv})`);
     if (config.isRailway) {
         // eslint-disable-next-line no-console
-        console.log("[server] Railway deploy: auth is Bearer token (see config/auth.js). Logs use IST.");
+        console.log("[server] Railway: set BEARER_TOKEN in Variables; clients use Authorization: Bearer <same>. IST logs.");
     }
 });
 
