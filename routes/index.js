@@ -4,6 +4,7 @@ const { formatIstIso } = require("../utils/time");
 const config = require("../config/env");
 const { isBearerReady } = require("../config/auth");
 const dataRoutes = require("./dataRoutes");
+const sellDoRoutes = require("./sellDoRoutes");
 
 const router = express.Router();
 
@@ -43,10 +44,14 @@ router.get("/", (req, res) => {
             update: "PUT /data/:index",
             removeOne: "DELETE /data/:index",
             removeAll: "DELETE /data (deletes all rows, resets id sequence)"
+        },
+        sellDo: {
+            markPlacedAnswered: "POST /sell-do/mark-placed-answered — body: { api_key, client_id } (proxies to sell.do)"
         }
     });
 });
 
 router.use("/data", dataRoutes);
+router.use("/sell-do", sellDoRoutes);
 
 module.exports = router;

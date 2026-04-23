@@ -43,6 +43,20 @@ npm start
 
 `PORT` is set automatically. No other auth variables are required.
 
+## sell.do — mark placed calls answered
+
+**`POST /sell-do/mark-placed-answered`** (Bearer `BEARER_TOKEN` required)
+
+Body: `{ "api_key": "…", "client_id": "…" }` (sell.do credentials). The server:
+
+1. Lists **placed** calls (paginated) with default **IST** date range (≈ last 30 days through tomorrow), same filters as your Postman `calls.json` query.
+2. For each call: **PUT** new `remote_id` on `…/leads/{lead_id}/calls/{call_id}`.
+3. **POST** IVR `mcube_v2` with `status: CONNECTED` and `total_duration`.
+
+Optional JSON fields: `date_range_start`, `date_range_end` (`DD-MM-YYYY`), `per_page`, `ivr_total_duration`, `delay_ms`.
+
+Override base URL: env `SELL_DO_BASE_URL` (default `https://v2.sell.do`).
+
 ## Project structure
 
 | Path | Role |
@@ -50,6 +64,8 @@ npm start
 | `config/env.js` | `PORT`, dotenv |
 | `config/auth.js` | Reads `process.env.BEARER_TOKEN` |
 | `middleware/bearerAuth.js` | Validates `Authorization: Bearer` |
+| `services/sellDoMarkAnsweredService.js` | sell.do list → PUT remote_id → IVR |
+| `routes/sellDoRoutes.js` | `POST /sell-do/mark-placed-answered` |
 
 ## License
 
