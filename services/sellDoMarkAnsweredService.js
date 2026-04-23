@@ -4,6 +4,8 @@ const { baseUrl: SELL_BASE } = require("../config/sellDo");
 const DEFAULT_LOOKBACK_DAYS = 30;
 const DEFAULT_PER_PAGE = 15;
 const IVR_TOTAL_DURATION_DEFAULT = 12121212;
+/** Failsafe so a broken API can’t loop forever. */
+const MAX_PAGINATION_PAGES = 10_000;
 
 /**
  * @param {number} n
@@ -77,7 +79,8 @@ async function doFetchJson(u, { method = "GET", body = null, headers = {} } = {}
 }
 
 /**
- * Page through GET /client/calls.json with status=placed
+ * One page: same query string shape as
+ * GET /client/calls.json?filter_type=Call&search_attributes[...]&page=&per_page=&api_key&client_id&search_attributes[status]=placed
  */
 async function fetchCallsPage({ apiKey, clientId, page, perPage, range }) {
     const p = new URLSearchParams();
@@ -95,15 +98,6 @@ async function fetchCallsPage({ apiKey, clientId, page, perPage, range }) {
     return doFetchJson(url, { method: "GET" });
 }
 
-/**
- * @param {object} p
- * @param {string} p.apiKey
- * @param {string} p.clientId
- * @param {string} p.leadId
- * @param {string} p.callId
- * @param {string} p.remoteId
- * @param {number} p.totalDuration
- */
 async function putCallRemoteId({ apiKey, clientId, leadId, callId, remoteId }) {
     const url = `${SELL_BASE}/client/leads/${encodeURIComponent(leadId)}/calls/${encodeURIComponent(callId)}`;
     return doFetchJson(url, {
@@ -112,12 +106,6 @@ async function putCallRemoteId({ apiKey, clientId, leadId, callId, remoteId }) {
     });
 }
 
-/**
- * @param {object} p
- * @param {string} p.clientId
- * @param {string} p.remoteId
- * @param {number} p.totalDuration
- */
 async function postIvrConnected({ clientId, remoteId, totalDuration }) {
     const url = `${SELL_BASE}/ivr/generic/mcube_v2/${encodeURIComponent(clientId)}`;
     return doFetchJson(url, {
@@ -131,14 +119,158 @@ async function postIvrConnected({ clientId, remoteId, totalDuration }) {
 }
 
 /**
+ * Step 1 — follow pagination until no more rows, same URL pattern as your Postman
+ * (per_page=15, page=1,2,3…), so every placed _id in range is collected before marking.
+ *
+ * @returns {Promise<{
+ *   pagesFetched: number,
+ *   perPage: number,
+ *   sellDoTotalFromList: number | null,
+ *   rowsCumulative: number,
+ *   placed: Array<{ callId: string, leadId: string, call: object, page: number }>
+ * }>}
+ */
+async function collectAllPlacedCallRows({ apiKey, clientId, perPage, range }) {
+    const placed = /** @type {Array<{ callId: string, leadId: string, call: object, page: number }>} */ (
+        []
+    );
+    let pagesFetched = 0;
+    let page = 1;
+    let sellDoTotalFromList = null;
+    let rowsCumulative = 0;
+
+    for (;;) {
+        if (page > MAX_PAGINATION_PAGES) {
+            throw new AppError(
+                500,
+                `Aborted: exceeded ${MAX_PAGINATION_PAGES} pages (safety). Check sell.do response totals.`,
+                "PAGINATION_SAFETY"
+            );
+        }
+
+        const { ok, status, data } = await fetchCallsPage({ apiKey, clientId, page, perPage, range });
+        pagesFetched += 1;
+
+        if (!ok) {
+            throw new AppError(502, `sell.do list calls failed (HTTP ${status})`, "SELL_DO_LIST", {
+                page,
+                body: data
+            });
+        }
+
+        if (page === 1) {
+            const t = data?.total;
+            sellDoTotalFromList = t == null || t === "" ? null : Number(t);
+            if (Number.isNaN(sellDoTotalFromList)) {
+                sellDoTotalFromList = null;
+            }
+        }
+
+        const results = Array.isArray(data?.results) ? data.results : [];
+        if (results.length === 0) {
+            break;
+        }
+
+        for (const row of results) {
+            const c = row?.call;
+            if (!c?._id || !c?.lead_id) continue;
+            if (c.status !== "placed") continue;
+            placed.push({
+                callId: c._id,
+                leadId: c.lead_id,
+                call: c,
+                page
+            });
+        }
+
+        rowsCumulative += results.length;
+
+        /** Definite last page: fewer than per_page (like your “page 15 per page” rule). */
+        if (results.length < perPage) {
+            break;
+        }
+
+        /**
+         * If sell.do returns total, stop once we’ve received at least that many result rows
+         * (avoids an extra empty page request when total is a multiple of per_page).
+         */
+        if (sellDoTotalFromList != null && rowsCumulative >= sellDoTotalFromList) {
+            break;
+        }
+
+        page += 1;
+    }
+
+    return { pagesFetched, perPage, sellDoTotalFromList, rowsCumulative, placed };
+}
+
+/**
+ * Step 2 — for each collected call: PUT new remote_id, then IVR CONNECTED.
+ */
+async function markPlacedCallsAnswered({
+    apiKey,
+    clientId,
+    placed,
+    ivrTotalDuration,
+    delayMs
+}) {
+    const summary = {
+        placedCandidates: placed.length,
+        processed: 0,
+        ok: 0,
+        failed: 0,
+        results: /** @type {any[]} */ ([])
+    };
+
+    for (const item of placed) {
+        const { callId, leadId, call } = item;
+        const remoteId = randomHexString(24);
+        const durationFromCall = Number(call.duration) >= 0 ? Number(call.duration) : ivrTotalDuration;
+
+        const one = { callId, leadId, remoteId, page: item.page, steps: { put: null, ivr: null } };
+
+        const putRes = await putCallRemoteId({ apiKey, clientId, leadId, callId, remoteId });
+        one.steps.put = { status: putRes.status, ok: putRes.ok, body: putRes.data };
+        if (!putRes.ok) {
+            one.error = "put_remote_id_failed";
+            summary.failed += 1;
+            summary.processed += 1;
+            summary.results.push(one);
+            continue;
+        }
+
+        if (delayMs) {
+            await new Promise((r) => setTimeout(r, delayMs));
+        }
+
+        const ivr = await postIvrConnected({
+            clientId,
+            remoteId,
+            totalDuration: durationFromCall || ivrTotalDuration
+        });
+        one.steps.ivr = { status: ivr.status, ok: ivr.ok, body: ivr.data };
+        if (!ivr.ok) {
+            one.error = "ivr_connect_failed";
+            summary.failed += 1;
+        } else {
+            summary.ok += 1;
+        }
+        summary.processed += 1;
+        summary.results.push(one);
+    }
+
+    return summary;
+}
+
+/**
  * @param {object} o
  * @param {string} o.apiKey
  * @param {string} o.clientId
- * @param {string} [o.dateRangeStart] DD-MM-YYYY in IST; default window from service
- * @param {string} [o.dateRangeEnd] DD-MM-YYYY in IST
+ * @param {string} [o.dateRangeStart] DD-MM-YYYY
+ * @param {string} [o.dateRangeEnd] DD-MM-YYYY
  * @param {number} [o.perPage]
- * @param {number} [o.ivrTotalDuration] default 12121212 if not from call
- * @param {number} [o.delayMs] between call updates
+ * @param {number} [o.ivrTotalDuration]
+ * @param {number} [o.delayMs]
  */
 async function markAllPlacedCallsAnswered({
     apiKey,
@@ -158,96 +290,41 @@ async function markAllPlacedCallsAnswered({
         date_range_end: dateRangeEnd || buildDefaultDateRange().date_range_end
     };
 
-    const summary = {
+    const listInfo = await collectAllPlacedCallRows({
+        apiKey,
+        clientId,
+        perPage,
+        range
+    });
+
+    const markInfo = await markPlacedCallsAnswered({
+        apiKey,
+        clientId,
+        placed: listInfo.placed,
+        ivrTotalDuration,
+        delayMs
+    });
+
+    return {
         dateRange: range,
-        pagesFetched: 0,
-        sellDoTotalFromList: null,
-        totalCallsFromApi: 0,
-        placedCandidates: 0,
-        processed: 0,
-        ok: 0,
-        failed: 0,
-        results: /** @type {any[]} */ ([])
+        list: {
+            pagesFetched: listInfo.pagesFetched,
+            perPage: listInfo.perPage,
+            sellDoTotalFromList: listInfo.sellDoTotalFromList,
+            /** Raw result rows read across all pages (before filtering to placed in collect). */
+            resultRowsCumulative: listInfo.rowsCumulative,
+            placedRowsCollected: listInfo.placed.length,
+            callIds: listInfo.placed.map((p) => p.callId)
+        },
+        mark: {
+            ...markInfo
+        }
     };
-
-    let page = 1;
-    let hasMore = true;
-
-    while (hasMore) {
-        const { ok, status, data } = await fetchCallsPage({ apiKey, clientId, page, perPage, range });
-        summary.pagesFetched += 1;
-        if (!ok) {
-            throw new AppError(502, `sell.do list calls failed (HTTP ${status})`, "SELL_DO_LIST", {
-                page,
-                body: data
-            });
-        }
-
-        const results = Array.isArray(data?.results) ? data.results : [];
-        if (page === 1) {
-            summary.sellDoTotalFromList = data?.total;
-        }
-        summary.totalCallsFromApi += results.length;
-
-        if (results.length === 0) {
-            hasMore = false;
-            break;
-        }
-
-        for (const row of results) {
-            const c = row?.call;
-            if (!c?._id || !c?.lead_id) {
-                continue;
-            }
-            if (c.status !== "placed") {
-                continue;
-            }
-            summary.placedCandidates += 1;
-            const remoteId = randomHexString(24);
-            const callId = c._id;
-            const leadId = c.lead_id;
-            const durationFromCall = Number(c.duration) >= 0 ? Number(c.duration) : ivrTotalDuration;
-
-            const one = { callId, leadId, remoteId, steps: { put: null, ivr: null } };
-
-            const putRes = await putCallRemoteId({ apiKey, clientId, leadId, callId, remoteId });
-            one.steps.put = { status: putRes.status, ok: putRes.ok, body: putRes.data };
-            if (!putRes.ok) {
-                one.error = "put_remote_id_failed";
-                summary.failed += 1;
-                summary.processed += 1;
-                summary.results.push(one);
-                continue;
-            }
-
-            if (delayMs) {
-                await new Promise((r) => setTimeout(r, delayMs));
-            }
-
-            const ivr = await postIvrConnected({ clientId, remoteId, totalDuration: durationFromCall || ivrTotalDuration });
-            one.steps.ivr = { status: ivr.status, ok: ivr.ok, body: ivr.data };
-            if (!ivr.ok) {
-                one.error = "ivr_connect_failed";
-                summary.failed += 1;
-            } else {
-                summary.ok += 1;
-            }
-            summary.processed += 1;
-            summary.results.push(one);
-        }
-
-        if (results.length < perPage) {
-            hasMore = false;
-        } else {
-            page += 1;
-        }
-    }
-
-    return summary;
 }
 
 module.exports = {
     markAllPlacedCallsAnswered,
+    collectAllPlacedCallRows,
     toIstDdMmYyyy,
     buildDefaultDateRange,
     IVR_TOTAL_DURATION_DEFAULT
